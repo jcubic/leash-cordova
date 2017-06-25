@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin id="pl.jcubic.leash.service" version="1.0.0"
+        xmlns="http://apache.org/cordova/ns/plugins/1.0">
+  <name>Service</name>
+  <description>Apache Cordova Leash shell service plugin</description>
+  <license>Apache 2.0</license>
+  <keywords>cordova,exec,runtime,process,shell,command</keywords>
+  <js-module name="service" src="www/service.js">
+    <clobbers target="service"/>
+  </js-module>
+  <platform name="android">
+    <config-file parent="/*" target="res/xml/config.xml">
+      <feature name="Service">
+        <param name="android-package" value="pl.jcubic.leash.Service" />
+        <param name="onload" value="true" />
+      </feature>
+    </config-file>
+    <source-file src="src/pl/jcubic/leash/Service.java"
+                 target-dir="src/pl/jcubic/leash/Service" />
+    <source-file src="src/pl/jcubic/leash/ReflectService.java"
+                 target-dir="src/pl/jcubic/leash/Service" />
+  </platform>
+</plugin>

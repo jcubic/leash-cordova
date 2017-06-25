@@ -1,0 +1,29 @@
+{
+    "name": "pl.jcubic.leash",
+    "displayName": "leash",
+    "version": "1.0.0",
+    "description": "Leash shell cordova application.",
+    "main": "index.js",
+    "scripts": {
+        "install": "cordova platform add android && cordova plugin add ./backend --nofetch",
+        "plugin": "cordova plugin remove pl.jcubic.leash.service; cordova plugin add ./backend --nofetch"
+    },
+    "author": "Jakub Jankiewicz <http://jcubic.pl/me>",
+    "license": "MIT",
+    "dependencies": {
+        "cordova-android": "^6.2.3",
+        "cordova-browser": "^4.1.0",
+        "cordova-plugin-whitelist": "git+https://github.com/apache/cordova-plugin-whitelist.git",
+        "pl.jcubic.leash.service": "./backend"
+    },
+    "cordova": {
+        "plugins": {
+            "cordova-plugin-whitelist": {},
+            "pl.jcubic.leash.service": {}
+        },
+        "platforms": [
+            "android",
+            "browser"
+        ]
+    }
+}
