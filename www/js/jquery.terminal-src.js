@@ -1130,6 +1130,11 @@
                 }
                 var tmp = command;
                 history.reset();
+
+                // for next input event on firefox/android with google keyboard
+                text = '';
+                no_keydown = true;
+
                 self.set('');
                 if (options.commands) {
                     options.commands(tmp);
@@ -1986,47 +1991,47 @@
         var skip_insert;
         // we hold text before keydown to fix backspace for Android/Chrome/SwiftKey
         // keyboard that generate keycode 229 for all keys #296
-        var text;
+        var text = '';
         // ---------------------------------------------------------------------
         // :: Keydown Event Handler
         // ---------------------------------------------------------------------
         function keydown_event(e) {
-            console.log('keydown');
             var result;
             dead_key = no_keypress && single_key;
             // special keys don't trigger keypress fix #293
             try {
-                single_key = e.key && e.key.length === 1 && !e.ctrlKey;
-                // chrome on android support key property but it's "Unidentified"
-                no_key = String(e.key).toLowerCase() === 'unidentified';
-                backspace = e.key.toUpperCase() === 'BACKSPACE' || e.which === 8;
+                if (!e.fake) {
+                    single_key = e.key && e.key.length === 1 && !e.ctrlKey;
+                    // chrome on android support key property but it's "Unidentified"
+                    no_key = String(e.key).toLowerCase() === 'unidentified';
+                    backspace = e.key.toUpperCase() === 'BACKSPACE' || e.which === 8;
+                }
             } catch (exception) {}
             // keydown created in input will have text already inserted and we
             // want text before input
-            if (!e.fake) {
-                text = clip.val();
-            }
-            if (e.key == "Unidentified") {
-                text = clip.val();
+            if (e.key === "Unidentified") {
                 no_keydown = true;
                 // android swift keyboard have always which == 229 we will triger proper
-                // event in input
+                // event in input with e.fake == true
                 return;
             }
-
-            no_keypress = true;
-            no_keydown = false;
-            var key = get_key(e);
-            console.log('keydown', e);
-            if ($.isFunction(options.keydown)) {
-                result = options.keydown(e);
-                if (result !== undefined) {
-                    //prevent_keypress = true;
-                    skip_insert = true;
-                    return result;
-                }
+            // without this backspace don't work
+            if (!e.fake) {
+                no_keypress = true;
+                no_keydown = false;
             }
+            var key = get_key(e);
             if (enabled) {
+                if ($.isFunction(options.keydown)) {
+                    result = options.keydown(e);
+                    if (result !== undefined) {
+                        //prevent_keypress = true;
+                        if (!result) {
+                            skip_insert = true;
+                        }
+                        return result;
+                    }
+                }
                 // CTRL+V don't fire keypress in IE11
                 skip_insert = ['CTRL+V', 'META+V'].indexOf(key) !== -1;
                 if (e.which !== 38 && !(e.which === 80 && e.ctrlKey)) {
@@ -2068,7 +2073,6 @@
         var doc = $(document.documentElement || window);
         self.keymap(options.keymap);
         function keypress_event(e) {
-            console.log('keypress');
             var result;
             no_keypress = false;
             if (e.ctrlKey || e.metaKey) {
@@ -2081,6 +2085,9 @@
                 if ($.isFunction(options.keypress)) {
                     result = options.keypress(e);
                     if (result !== undefined) {
+                        if (!result) {
+                            skip_insert = true;
+                        }
                         return result;
                     }
                 }
@@ -2092,7 +2099,7 @@
                 // key polyfill is not correct for keypress
                 // https://github.com/cvan/keyboardevent-key-polyfill/issues/15
                 var key;
-                if (is_key_native()) {
+                if (is_key_native() || e.fake) {
                     key = e.key;
                 }
                 if (!key || no_key) {
@@ -2122,63 +2129,66 @@
                 }
             }
         }
+        function event(type, chr, which) {
+            var event = $.Event(type);
+            event.which = which;
+            event.key = chr;
+            event.fake = true;
+            doc.trigger(event);
+        }
         function input() {
-            console.log('input');
             // Some Androids don't fire keypress - #39
             // if there is dead_key we also need to grab real character #158
+            // Firefox/Android with google keyboard don't fire keydown and keyup #319
             if (no_keydown || ((no_keypress || dead_key) && !skip_insert &&
-                               (single_key || no_key) &&
-                               !backspace)) {
+                               (single_key || no_key) && !backspace)) {
                 var pos = position;
                 var val = clip.val();
-                function event(type, chr, which) {
-                    var event = $.Event(type);
-                    event.which = which;
-                    event.key = chr;
-                    event.fake = true;
-                    doc.trigger(event);
+                // backspace is set in keydown if no keydown we need to get new one
+                if (no_keydown) {
+                    backspace = val.length < text.length;
                 }
-                function keydown(chr) {
-                    event('keydown', chr, chr.toUpperCase().charCodeAt(0));
-                }
-                function keypress(chr) {
-                    event('keypress', chr, chr.charCodeAt(0));
-                }
-                if (val !== '') {
-                    if (reverse_search) {
-                        rev_search_str = val;
-                        reverse_history_search();
-                        draw_reverse_prompt();
-                    } else {
-                        var entered_text = val.substring(position);
-                        if (entered_text.length == 1) {
-                            // we trigger events so keypress and keydown callback work
-                            if (no_keydown) {
-                                console.log('no_keydown');
-                                keydown(entered_text);
+                if (reverse_search) {
+                    rev_search_str = val;
+                    reverse_history_search();
+                    draw_reverse_prompt();
+                } else {
+                    var chr = val.substring(position);
+                    if (chr.length === 1 || backspace) {
+                        // we trigger events so keypress and keydown callback work
+                        if (no_keydown) {
+                            var keycode;
+                            if (backspace) {
+                                keycode = 8;
+                            } else {
+                                keycode = chr.toUpperCase().charCodeAt(0);
                             }
-                            if (no_keypress) {
-                                console.log('no_keypress');
-                                keypress(entered_text);
-                            }
+                            event('keydown', backspace ? 'Backspace' : chr, keycode);
                         }
-                        // if user return false in keydown we don't want to insert text
-                        if (skip_insert) {
-                            skip_insert = false;
-                            return;
+                        if (no_keypress && !backspace) {
+                            event('keypress', chr, chr.charCodeAt(0));
                         }
-                        self.set(val);
                     }
-                    // backspace detection for Android/Chrome/SwiftKey
-                    if (backspace || val.length < text.length) {
-                        self.position(pos - 1);
-                    } else {
-                        // user enter more then one character if click on complete word
-                        // on android
-                        self.position(pos + Math.abs(val.length - text.length));
+                    if (backspace) {
+                        text = command;
+                        return;
                     }
+                    // if user return false in keydown we don't want to insert text
+                    if (skip_insert) {
+                        skip_insert = false;
+                        return;
+                    }
+                    self.set(val);
+                }
+                if (backspace) {
+                    self.position(pos - 1);
+                } else {
+                    // user enter more then one character if click on complete word
+                    // on android
+                    self.position(pos + Math.abs(val.length - text.length));
                 }
             }
+            text = command;
             skip_insert = false;
             no_keydown = true;
         }
@@ -3066,7 +3076,7 @@
     // :: DOM at init like with:
     // :: $('<div/>').terminal().echo('foo bar').appendTo('body');
     // -----------------------------------------------------------------------
-    function char_size() {
+    function get_char_size() {
         var temp = $('<div class="terminal temp"><div class="cmd"><span cla' +
                      'ss="prompt">&nbsp;</span></div></div>').appendTo('body');
         var rect = temp.find('span')[0].getBoundingClientRect();
@@ -3080,17 +3090,17 @@
     // -----------------------------------------------------------------------
     // :: calculate numbers of characters
     // -----------------------------------------------------------------------
-    function get_num_chars(terminal) {
+    function get_num_chars(terminal, char_size) {
         var width = terminal.find('.terminal-fill').width();
-        var result = Math.floor(width / char_size().width);
+        var result = Math.floor(width / char_size.width);
         // random number to not get NaN in node but big enough to not wrap exception
         return result || 1000;
     }
     // -----------------------------------------------------------------------
     // :: Calculate number of lines that fit without scroll
     // -----------------------------------------------------------------------
-    function get_num_rows(terminal) {
-        return Math.floor(terminal.find('.terminal-fill').height() / char_size().height);
+    function get_num_rows(terminal, char_size) {
+        return Math.floor(terminal.find('.terminal-fill').height() / char_size.height);
     }
     // -----------------------------------------------------------------------
     // :: try to copy given DOM element text to clipboard
@@ -4580,6 +4590,7 @@
         var command_queue = new DelayQueue();
         var init_queue = new DelayQueue();
         var when_ready = ready(init_queue);
+        var char_size = get_char_size();
         var cmd_ready = ready(command_queue);
         var in_login = false;// some Methods should not be called when login
         // TODO: Try to use mutex like counter for pause/resume
@@ -5054,8 +5065,8 @@
                 if (settings.numChars) {
                     return settings.numChars;
                 }
-                if (!num_chars) {
-                    num_chars = get_num_chars(self);
+                if (typeof num_chars === 'undefined') {
+                    num_chars = get_num_chars(self, char_size);
                 }
                 return num_chars;
             },
@@ -5067,8 +5078,8 @@
                 if (settings.numRows) {
                     return settings.numRows;
                 }
-                if (!num_rows) {
-                    num_rows = get_num_rows(self);
+                if (typeof num_rows === 'undefined') {
+                    num_rows = get_num_rows(self, char_size);
                 }
                 return num_rows;
             },
@@ -5375,13 +5386,19 @@
                     }
                     width = self.width();
                     height = self.height();
-                    var new_num_chars = get_num_chars(self);
-                    var new_num_rows = get_num_rows(self);
+                    if (typeof settings.numChars !== 'undefined' &&
+                        typeof settings.numRows !== 'undefined') {
+                        return;
+                    }
+                    char_size = get_char_size();
+                    var new_num_chars = get_num_chars(self, char_size);
+                    var new_num_rows = get_num_rows(self, char_size);
                     // only if number of chars changed
                     if (new_num_chars !== num_chars ||
                         new_num_rows !== num_rows) {
                         num_chars = new_num_chars;
                         num_rows = new_num_rows;
+                        command_line.resize(num_chars);
                         redraw();
                         var top = interpreters.top();
                         if ($.isFunction(top.resize)) {
@@ -5439,7 +5456,7 @@
                             });
                         }
                     }
-                    num_rows = get_num_rows(self);
+                    //num_rows = get_num_rows(self, char_size);
                     if (settings.scrollOnEcho || bottom) {
                         scroll_to_bottom();
                     }
@@ -6257,7 +6274,10 @@
             if (self.is(':visible')) {
                 num_chars = self.cols();
                 command_line.resize(num_chars);
-                num_rows = get_num_rows(self);
+                if (!char_size) {
+                    char_size = get_char_size();
+                }
+                num_rows = get_num_rows(self, char_size);
             }
             // -------------------------------------------------------------
             // Run Login
