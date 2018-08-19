@@ -20,7 +20,7 @@ cordova run android
 
 it should build the project and deploy it to your phone if you're connected via usb cable and debug via usb is turn on.
 
-If you modify the servie plugin that's in `./backend` directory you can run:
+If you modify the service plugin that's in `./backend` directory you can run:
 
 ```
 npm run plugin
@@ -28,6 +28,10 @@ npm run plugin
 
 to remove update the plugin from `./backend` directory
 
+
+### Limitations
+
+The full shell is available only when you have rooted phone or when you connect to computer and enable USB debug mode.
 
 ### License
 
